@@ -233,7 +233,7 @@ div[data-testid="stSliderValue"] {
 # 0. 사이드바 & 데이터 로드
 # ══════════════════════════════════════════
 if "virtual_today" not in st.session_state:
-    st.session_state.virtual_today = datetime.now().date()
+    st.session_state.virtual_today = get_simulator_default_date()
 
 with st.sidebar:
     st.markdown("### 📅 시뮬레이션 설정")

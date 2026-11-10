@@ -40,19 +40,3 @@ pg = st.navigation({
 
 # 페이지 실행
 pg.run()
-
-# ==========================================
-# 3. 사이드바 음악 플레이어 (가지마가지마)
-# ==========================================
-with st.sidebar:
-    st.write("🎵 **Now Playing: 벛꽃엔딩**")
-    st.components.v1.html(
-        """
-        <iframe width="100%" height="150" src="https://www.youtube.com/embed/?v=uEsT7K_X7Pw&list=RDuEsT7K_X7Pw&start_radio=1" 
-        title="버스커버스커 - 벛꽃엔딩" frameborder="0" 
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-        allowfullscreen></iframe>
-        """,
-        height=160,
-    )
-    st.caption("🚀 **3팀 프로젝트: 이탈 방어 시스템**")
