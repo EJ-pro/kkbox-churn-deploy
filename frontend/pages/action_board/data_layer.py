@@ -11,7 +11,6 @@ import os
 import numpy as np
 import pandas as pd
 import streamlit as st
-from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
 from pages.action_board.config import HIGH_RISK_THRESHOLD
@@ -27,9 +26,88 @@ DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "3307")
 DB_NAME = os.getenv("DB_NAME", "churn_db")
 
-# SQLAlchemy Engine 생성
-connection_string = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-engine = create_engine(connection_string)
+def _build_demo_data(size: int = 1200) -> dict[str, pd.DataFrame]:
+    """무료 배포와 포트폴리오 시연을 위한 재현 가능한 익명 데모 데이터."""
+    rng = np.random.default_rng(20260402)
+    user_ids = np.array([f"demo_{index:05d}" for index in range(1, size + 1)])
+    base_date = pd.Timestamp("2026-04-02")
+
+    auto_renew = rng.choice([0, 1], size=size, p=[0.38, 0.62])
+    is_cancel = rng.choice([0, 1], size=size, p=[0.86, 0.14])
+    activity_drop = rng.beta(2.1, 3.7, size=size)
+    churn_probability = np.clip(
+        0.18
+        + (1 - auto_renew) * 0.34
+        + is_cancel * 0.30
+        + activity_drop * 0.24
+        + rng.normal(0, 0.055, size),
+        0.03,
+        0.99,
+    )
+
+    reasons = np.select(
+        [
+            is_cancel == 1,
+            auto_renew == 0,
+            activity_drop >= 0.62,
+            activity_drop >= 0.40,
+        ],
+        [
+            "멤버십 직접해지",
+            "자동결제 미등록",
+            "최근 7일간 활동성 급감",
+            "일평균 청취량 및 몰입도 저하",
+        ],
+        default="복합적 요인(기타 사유)",
+    )
+    risk_grade = np.select(
+        [churn_probability >= 0.90, churn_probability >= 0.80],
+        ["높음", "보통"],
+        default="낮음",
+    )
+
+    members = pd.DataFrame({
+        "msno": user_ids,
+        "city": rng.integers(1, 23, size=size),
+        "registered_via": rng.choice([3, 4, 7, 9, 13], size=size),
+        "is_churn": (churn_probability >= 0.68).astype(int),
+    })
+    transactions = pd.DataFrame({
+        "msno": user_ids,
+        "payment_method_id": rng.choice([29, 30, 36, 38, 41], size=size),
+        "payment_plan_days": rng.choice([30, 60, 90], size=size, p=[0.82, 0.12, 0.06]),
+        "plan_list_price": rng.choice([99, 129, 149, 180], size=size, p=[0.14, 0.51, 0.25, 0.10]),
+        "actual_amount_paid": rng.choice([99, 129, 149, 180], size=size, p=[0.14, 0.51, 0.25, 0.10]),
+        "is_auto_renew": auto_renew,
+        "is_cancel": is_cancel,
+        "transaction_date": base_date - pd.to_timedelta(rng.integers(1, 45, size=size), unit="D"),
+        "membership_expire_date": base_date + pd.to_timedelta(rng.integers(-7, 15, size=size), unit="D"),
+        "is_churn": (churn_probability >= 0.68).astype(int),
+    })
+    user_logs = pd.DataFrame({
+        "msno": user_ids,
+        "num_25": rng.integers(0, 80, size=size),
+        "num_50": rng.integers(0, 60, size=size),
+        "num_75": rng.integers(0, 50, size=size),
+        "num_985": rng.integers(0, 40, size=size),
+        "num_100": rng.integers(0, 160, size=size),
+        "num_unq": rng.integers(1, 120, size=size),
+        "total_secs": rng.integers(600, 72000, size=size),
+    })
+    predictions = pd.DataFrame({
+        "msno": user_ids,
+        "prediction_date": base_date,
+        "churn_probability": churn_probability,
+        "risk_grade": risk_grade,
+        "main_reason_code": reasons,
+    })
+
+    return {
+        "members": members,
+        "transactions": transactions,
+        "user_logs": user_logs,
+        "predictions": predictions,
+    }
 
 
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────
@@ -74,6 +152,10 @@ def _parse_date_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def _read_table(table_name: str) -> pd.DataFrame:
+    from sqlalchemy import create_engine, text
+
+    connection_string = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    engine = create_engine(connection_string)
     with engine.connect() as conn:
         df = pd.read_sql(text(f"SELECT * FROM {table_name}"), conn)
     return _parse_date_columns(df)
@@ -84,9 +166,19 @@ def get_shifted_raw_data(force_refresh: bool = False) -> dict[str, pd.DataFrame]
     """
     모든 테이블을 로드하고 날짜를 3320일 밀어줍니다. (v3: Renamed to clear cache)
     """
-    members = _read_table("members")
-    transactions = _read_table("transactions")
-    user_logs = _read_table("user_logs")
+    data_source = os.getenv("DATA_SOURCE", "auto").lower()
+    if data_source == "demo":
+        return _merge_source_data(_build_demo_data())
+
+    try:
+        members = _read_table("members")
+        transactions = _read_table("transactions")
+        user_logs = _read_table("user_logs")
+    except Exception as exc:
+        if data_source == "mysql":
+            raise
+        print(f"MySQL unavailable; using demo data: {exc}")
+        return _merge_source_data(_build_demo_data())
 
     # churn_prediction 은 있을 수도 있고 없을 수도 있게 처리
     try:
@@ -98,6 +190,20 @@ def get_shifted_raw_data(force_refresh: bool = False) -> dict[str, pd.DataFrame]
     print("user_logs:", user_logs.shape)
     print("predictions:", predictions.shape)
 
+
+    return _merge_source_data({
+        "members": members,
+        "transactions": transactions,
+        "user_logs": user_logs,
+        "predictions": predictions,
+    })
+
+
+def _merge_source_data(raw: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    members = raw.get("members", pd.DataFrame()).copy()
+    transactions = raw.get("transactions", pd.DataFrame()).copy()
+    user_logs = raw.get("user_logs", pd.DataFrame()).copy()
+    predictions = raw.get("predictions", pd.DataFrame()).copy()
 
     # 1) members.is_churn 병합
     if not members.empty and not transactions.empty:

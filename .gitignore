@@ -1,6 +1,7 @@
 .venv
 data/processed/*.csv
 .env
+.streamlit/secrets.toml
 frontend/pages/__pycache__
 frontend/__pycache__
 frontend/pages/action/__pycache__

@@ -1,6 +1,35 @@
 ## KKBOX 구독자 이탈 예측 및 방지 시스템 (Churn Prevention System)
 - KKBOX 데이터를 활용하여 이탈 위험 고객을 조기에 감지하고, 맞춤형 마케팅 액션을 시뮬레이션하여 비즈니스 손실을 최소화하는 솔루션입니다.
 
+## Live Demo / 배포
+
+이 저장소는 Streamlit Community Cloud에서 바로 실행할 수 있도록 준비되어 있습니다. 배포본은 개인정보가 없는 고정 시드의 익명 데모 데이터를 사용합니다.
+
+### 로컬 실행
+
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+streamlit run frontend/app.py
+```
+
+DB 없이 데모 모드를 고정하려면 `.env.example`을 `.env`로 복사한 뒤 `DATA_SOURCE=demo`를 사용합니다. 환경변수가 없으면 MySQL 연결을 먼저 시도하고, 연결할 수 없을 때 자동으로 데모 모드로 전환됩니다.
+
+### Streamlit Community Cloud
+
+1. 저장소를 배포할 GitHub 계정에 Fork합니다.
+2. [share.streamlit.io](https://share.streamlit.io/)에서 `New app`을 선택합니다.
+3. Main file path를 `frontend/app.py`로 설정합니다.
+4. Advanced settings의 Secrets에 아래 값을 추가합니다.
+
+```toml
+DATA_SOURCE = "demo"
+```
+
+MySQL을 연결할 때는 `DATA_SOURCE = "mysql"`로 변경하고 `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `DB_NAME`을 환경변수로 설정합니다. 실제 비밀번호나 원본 KKBOX 데이터는 Git에 커밋하지 않습니다.
+
 ## 팀원 소개
 
 <table>

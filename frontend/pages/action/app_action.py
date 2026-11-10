@@ -225,8 +225,6 @@ def get_real_action_data(virtual_today: pd.Timestamp) -> pd.DataFrame:
         (df["churn_prob"] >= 0.5)
     )
     target = df[mask].copy()
-    if target.empty:
-        return target
     target = target.drop(columns=["churn_probability"], errors="ignore").rename(
         columns={"msno": "user_id", "churn_prob": "churn_probability"}
     )
